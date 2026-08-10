@@ -1,0 +1,6 @@
+"""couplingdx: a pre-data feasibility diagnostic for two-person coupling designs."""
+from .core import (h, inv_h, ceiling, counting_floor, required_duration, design_check,
+                   DesignReport, NU_MOMENTS, NU_USABLE)
+__version__ = "0.1.0"
+__all__ = ["h", "inv_h", "ceiling", "counting_floor", "required_duration", "design_check",
+           "DesignReport", "NU_MOMENTS", "NU_USABLE"]

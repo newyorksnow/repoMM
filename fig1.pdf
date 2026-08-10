@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "couplingdx"
+version = "0.1.0"
+description = "Pre-data feasibility diagnostic for two-person coupling designs"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = []
+
+[project.scripts]
+couplingdx = "couplingdx.__main__:main"

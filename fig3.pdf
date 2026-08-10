@@ -1,0 +1,76 @@
+import math, pytest
+from couplingdx import (h, inv_h, ceiling, counting_floor, design_check,
+                        required_duration)
+
+def test_h_limits():
+    assert h(0) == pytest.approx(1.0)
+    assert h(1e-9) == pytest.approx(1.0, abs=1e-6)
+    assert h(50) == pytest.approx(1/50, rel=1e-3)
+
+def test_h_monotone():
+    xs = [0.01,0.1,0.5,1,2,5,10]
+    assert all(h(a) > h(b) for a,b in zip(xs, xs[1:]))
+
+def test_inv_h_roundtrip():
+    for t in (0.05,0.5,1.0,3.0,8.0):
+        assert inv_h(h(t)) == pytest.approx(t, rel=1e-5)
+
+def test_inv_h_edges():
+    assert inv_h(1.0) == 0.0
+    assert inv_h(1.5) == 0.0
+    assert inv_h(0.0) == math.inf
+
+def test_ceiling_known():
+    assert ceiling(7, 0.0) == pytest.approx(0.4514, abs=1e-3)
+    assert ceiling(7, 1.0) == pytest.approx(0.3333, abs=1e-3)
+    assert ceiling(7, 5.0) == pytest.approx(0.1716, abs=1e-3)
+
+def test_ceiling_decreasing_in_offset():
+    v = [ceiling(7, s) for s in (0,1,2,5,10)]
+    assert all(a > b for a,b in zip(v, v[1:]))
+
+def test_counting_floor():
+    assert counting_floor(126.8) == pytest.approx(11.26, abs=0.01)
+
+def test_eating_case_infeasible():
+    # FIC: se 0.0158/s, contrast 0.0154/s, gap 11.4 bites, 127 events
+    r = design_check(baseline_se=0.0158, baseline_contrast=0.0154,
+                     gap=11.4, n_events_total=127)
+    assert not r.feasible
+    assert r.nu == pytest.approx(0.69, abs=0.02)
+    assert r.sigma_is_floor
+
+def test_sigma_below_floor_is_corrected():
+    r = design_check(baseline_se=0.0158, baseline_contrast=0.0154,
+                     gap=11.4, sigma=2.0, n_events_total=127)
+    assert r.sigma == pytest.approx(11.27, abs=0.05)
+    assert any("not attainable" in n for n in r.notes)
+
+def test_replication_raises_nu():
+    a = design_check(baseline_se=0.02, baseline_contrast=0.05, gap=200,
+                     n_events_total=400, n_baseline_sessions=1)
+    b = design_check(baseline_se=0.02, baseline_contrast=0.05, gap=200,
+                     n_events_total=400, n_baseline_sessions=16)
+    assert b.nu == pytest.approx(4 * a.nu, rel=1e-6)
+
+def test_feasible_case():
+    r = design_check(baseline_se=0.004, baseline_contrast=0.10, gap=400,
+                     n_events_total=600, nu_star=12)
+    assert r.feasible and r.theta_max > r.theta_min
+
+def test_rejects_zero_gap():
+    with pytest.raises(ValueError):
+        design_check(baseline_se=0.01, baseline_contrast=0.01, gap=0,
+                     n_events_total=100)
+
+
+def test_required_duration_scaling():
+    a = required_duration(0.02, 0.18)
+    b = required_duration(0.04, 0.18)
+    assert b == pytest.approx(a / 4, rel=1e-9)
+
+def test_required_duration_eating_vs_speech():
+    eat = required_duration(0.0154, 2 * 0.0908, nu_star=12)
+    sp = required_duration(1.24, 2 * 5.12, dispersion=3.0, nu_star=12)
+    assert eat > 100_000          # > 24 hours: not a runnable study
+    assert 2000 < sp < 4000       # under an hour: demanding but reachable

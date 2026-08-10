@@ -1,0 +1,165 @@
+import os
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+import numpy as np, pandas as pd, itertools
+import matplotlib; matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+plt.rcParams.update({
+    "font.family": "serif", "font.size": 9, "axes.labelsize": 9,
+    "axes.titlesize": 9, "xtick.labelsize": 8, "ytick.labelsize": 8,
+    "legend.fontsize": 8, "axes.spines.top": False, "axes.spines.right": False,
+    "figure.dpi": 300, "savefig.dpi": 300, "lines.linewidth": 1.4,
+})
+GREY, DARK, ACC = "#888888", "#222222", "#B03030"
+
+D = pd.read_csv(os.path.join(HERE, "poisson_permeal.csv"))
+se_beta = D.se_beta.mean()          # Fisher-information SE, one meal
+sig_pair = np.sqrt(2) * se_beta
+sigma_D = np.sqrt(2) * 6.79         # holdout RMSE route (main text)
+
+P = pd.DataFrame([dict(G=abs(D.beta[b] - D.beta[a]),
+                       Tm=float(.5 * (D["T"][a] + D["T"][b])))
+                  for a, b in itertools.combinations(range(21), 2)])
+P["AGT"] = P.G * P["Tm"]
+P["nu"] = P.G / sig_pair
+
+h = lambda t: (1 - np.exp(-t)) / t
+
+# ---------------- Figure 1 ----------------
+fig, ax = plt.subplots(1, 2, figsize=(7.0, 2.9))
+
+t = np.logspace(-2, 1.7, 600)
+ax[0].semilogx(t, h(t), color=DARK)
+tmin, tmax = 0.115, 3.15
+ax[0].axvspan(tmin, tmax, color=GREY, alpha=.22, lw=0)
+ax[0].text(np.sqrt(tmin * tmax), .06, "noiseless\nwindow", ha="center",
+           va="bottom", fontsize=7.5, color="#555555")
+th1 = 0.636
+for s, m in [(th1, "o"), (7 * th1, "s")]:
+    ax[0].plot([s], [h(s)], m, ms=4.5, color=ACC, zorder=5)
+ax[0].annotate("", xy=(7 * th1, h(7 * th1)), xytext=(7 * th1, h(th1)),
+               arrowprops=dict(arrowstyle="<->", color=ACC, lw=1.1))
+ax[0].text(7 * th1 * 1.25, .5 * (h(th1) + h(7 * th1)),
+           r"$\Sigma^\star=0.52$", color=ACC, fontsize=8, va="center")
+ax[0].set_xlabel(r"$\theta = 2\kappa T$")
+ax[0].set_ylabel(r"contraction factor  $h(\theta)$")
+ax[0].set_ylim(0, 1.05); ax[0].set_title("(A)  the observable", loc="left")
+
+s0 = np.linspace(0, 8, 400)
+q = (s0 + 7) / (s0 + 1)
+ax[1].plot(s0, (np.sqrt(q) - 1) / (np.sqrt(q) + 1), color=DARK,
+           label=r"asymptotic $\rho$")
+Sh = []
+tg = np.linspace(1e-4, 20, 60000)
+for qq in q:
+    Sh.append(np.max(h(tg) - h(qq * tg)))
+ax[1].plot(s0, Sh, color=ACC, ls="--", label=r"slow-drive $h$")
+for x in (0, 1, 2, 5):
+    ax[1].plot([x], [np.interp(x, s0, Sh)], "o", ms=3.5, color=ACC)
+ax[1].set_xlabel(r"baseline coupling  $s_0$")
+ax[1].set_ylabel(r"max attainable spread  $\Sigma^\star$")
+ax[1].set_ylim(0, .6); ax[1].legend(frameon=False, loc="upper right")
+ax[1].set_title("(B)  ceiling on detectability", loc="left")
+fig.tight_layout(); fig.savefig(os.path.join(ROOT, "figures", "fig1.pdf")); plt.close(fig)
+
+# ---------------- Figure 2 ----------------
+fig, ax = plt.subplots(1, 2, figsize=(7.0, 2.9))
+
+ax[0].hist(P.nu, bins=28, color=GREY, edgecolor="white", lw=.5)
+ax[0].axvline(3, color=ACC, lw=1.5)
+ax[0].text(3.05, ax[0].get_ylim()[1] * .88, "inclusion\ncriterion\n" + r"$\nu\geq3$",
+           color=ACC, fontsize=7.5, va="top")
+ax[0].plot([P.nu.max()], [1.5], "v", ms=5, color=DARK)
+ax[0].text(P.nu.max(), 4, f"max\n{P.nu.max():.2f}", ha="center",
+           fontsize=7.5, color=DARK)
+ax[0].set_xlim(0, 3.6)
+ax[0].set_xlabel(r"solo contrast ratio  $\nu=\Gamma/\sigma_\beta$")
+ax[0].set_ylabel("pseudo-dyads")
+ax[0].set_title("(A)  no pair is admissible", loc="left")
+
+ax[1].scatter(P.nu, P.AGT, s=9, color=GREY, edgecolor="none", alpha=.75)
+ax[1].axvline(3, color=ACC, lw=1.2)
+ax[1].axhline(3 * sigma_D, color=ACC, lw=1.2, ls="--")
+ax[1].add_patch(Rectangle((3, 3 * sigma_D), 10, 100, color=ACC, alpha=.10, lw=0))
+ax[1].text(3.15, 46, "feasible\nregion\n(empty)", color=ACC, fontsize=7.5, va="top")
+ax[1].text(.15, 3 * sigma_D + 1.6, r"$A\Gamma T=\nu\sigma_D$", color=ACC, fontsize=7.5)
+ax[1].set_xlim(0, 4.2); ax[1].set_ylim(0, 55)
+ax[1].set_xlabel(r"solo contrast ratio  $\nu$")
+ax[1].set_ylabel(r"uncoupled gap  $A\Gamma T$  (bites)")
+ax[1].set_title("(B)  both criteria fail together", loc="left")
+fig.tight_layout(); fig.savefig(os.path.join(ROOT, "figures", "fig2.pdf")); plt.close(fig)
+
+# ---------------- Figure 3 ----------------
+AGT = P.AGT.median()
+floor = np.sqrt(2 * D.N.mean())
+
+def inv_h(v):
+    if v >= 1: return np.nan
+    lo, hi = 1e-9, 1e4
+    for _ in range(200):
+        m = .5 * (lo + hi)
+        if h(m) > v: lo = m
+        else: hi = m
+    return .5 * (lo + hi)
+
+fig, ax = plt.subplots(figsize=(3.6, 3.0))
+sD = np.linspace(1, 22, 500)
+for k, ls in [(1.5, ":"), (2, "-."), (3, "-"), (4, "--")]:
+    ax.plot(sD, [inv_h(k * s_ / AGT) for s_ in sD], ls=ls, color=DARK,
+            label=rf"$\nu^*={k}$")
+ax.axvspan(floor, 22, color=ACC, alpha=.12, lw=0)
+ax.axvline(floor, color=ACC, lw=1.4)
+ax.text(floor + .5, 2.55, "Poisson floor\n11.3 bites", color=ACC, fontsize=7.5, va="top")
+ax.text(17, 1.4, "physically\nattainable\nrange", color=ACC, fontsize=7.5, ha="center")
+ax.set_xlim(1, 22); ax.set_ylim(0, 3)
+ax.set_xlabel(r"gap measurement error  $\sigma_D$  (bites)")
+ax.set_ylabel(r"largest usable  $\theta$")
+ax.legend(frameon=False, loc="upper right")
+fig.tight_layout(); fig.savefig(os.path.join(ROOT, "figures", "fig3.pdf")); plt.close(fig)
+
+# ---------------- Figure 4 ----------------
+rng = np.random.default_rng(23)
+S_, R_, m_, theta = .18, 6000, 8, 1.
+hth = h(theta)
+rows = []
+for Gam in (0.016, 0.032, 0.048, 0.064, 0.096):
+    for T_ in (740, 1500, 3000):
+        lam = S_ / 2 * T_
+        se_b = np.sqrt(lam / m_) / T_
+        nu = Gam / (np.sqrt(2) * se_b)
+        bi, bj = (S_ - Gam) / 2, (S_ + Gam) / 2
+        ki = rng.poisson(S_ * T_ / 2 - Gam * T_ * hth / 2, R_)
+        kj = rng.poisson(S_ * T_ / 2 + Gam * T_ * hth / 2, R_)
+        bih = rng.poisson(bi * T_ * m_, R_) / (T_ * m_)
+        bjh = rng.poisson(bj * T_ * m_, R_) / (T_ * m_)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            hh = (kj - ki) / (kj + ki) * (bjh + bih) / (bjh - bih)
+        ok = np.isfinite(hh) & (hh > 0) & (hh < 1)
+        th = np.array([inv_h(v) for v in hh[ok]])
+        rows.append(dict(AGT=Gam * T_, nu=nu, usable=ok.mean(),
+                         iqr=np.nanpercentile(th, 75) - np.nanpercentile(th, 25)))
+R4 = pd.DataFrame(rows)
+
+fig, ax = plt.subplots(1, 2, figsize=(7.0, 2.9))
+sc = ax[0].scatter(R4.AGT, R4.usable, c=R4.nu, cmap="viridis", s=34, edgecolor="none")
+ax[0].axvline(AGT, color=ACC, ls=":", lw=1.3)
+ax[0].text(AGT + 4, .15, "FIC median\n11.4 bites", color=ACC, fontsize=7.5)
+ax[0].axhline(.9, color=GREY, ls="--", lw=1)
+ax[0].set_xscale("log"); ax[0].set_xlabel(r"uncoupled gap  $A\Gamma T$  (bites)")
+ax[0].set_ylabel("proportion of replicates\nyielding a usable estimate")
+ax[0].set_ylim(0, 1.05); ax[0].set_title("(A)  estimability", loc="left")
+plt.colorbar(sc, ax=ax[0], label=r"$\nu$")
+
+sc2 = ax[1].scatter(R4.AGT, R4.iqr, c=R4.nu, cmap="viridis", s=34, edgecolor="none")
+ax[1].axvline(AGT, color=ACC, ls=":", lw=1.3)
+ax[1].axhline(theta, color=GREY, ls="--", lw=1)
+ax[1].text(120, 1.12, "IQR = true " + r"$\theta$", fontsize=7.5, color="#555555")
+ax[1].set_xscale("log"); ax[1].set_xlabel(r"uncoupled gap  $A\Gamma T$  (bites)")
+ax[1].set_ylabel(r"IQR of $\hat\theta$")
+ax[1].set_title("(B)  precision", loc="left")
+plt.colorbar(sc2, ax=ax[1], label=r"$\nu$")
+fig.tight_layout(); fig.savefig(os.path.join(ROOT, "figures", "fig4.pdf")); plt.close(fig)
+
+print("figures written to", os.path.join(ROOT, "figures"))
